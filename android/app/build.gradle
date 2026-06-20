@@ -15,12 +15,12 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11
+        jvmTarget = "11"
     }
 
     defaultConfig {
         applicationId = "app.sendero.sendero"
-        minSdkVersion = flutter.minSdkVersion           // Android 6.0 — covers 97%+ active devices
+        minSdkVersion = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
