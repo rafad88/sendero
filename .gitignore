@@ -1,0 +1,41 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart
+*.freezed.dart
+
+# Supabase secrets
+.env
+.env.local
+*.env
+
+# IDE
+.idea/
+.vscode/settings.json
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Android build artifacts
+android/.gradle/
+android/local.properties
+android/app/build/
+android/captures/
+
+# iOS build artifacts
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/Runner.xcworkspace/
+
+# Generated files (run build_runner to regenerate)
+*.g.dart
+*.freezed.dart

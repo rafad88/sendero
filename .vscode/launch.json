@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sendero (dev)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=${env:SUPABASE_URL}",
+        "--dart-define=SUPABASE_ANON_KEY=${env:SUPABASE_ANON_KEY}",
+        "--dart-define=MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty"
+      ]
+    },
+    {
+      "name": "Sendero (release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "args": [
+        "--dart-define=SUPABASE_URL=${env:SUPABASE_URL}",
+        "--dart-define=SUPABASE_ANON_KEY=${env:SUPABASE_ANON_KEY}",
+        "--dart-define=MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty"
+      ]
+    }
+  ]
+}
