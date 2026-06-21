@@ -99,25 +99,31 @@ class TrackingNotifier extends _$TrackingNotifier {
     );
   }
 
-  Future<String> stopRecording() async {
+  Future<String?> stopRecording() async {
     await _positionSub?.cancel();
     _positionSub = null;
 
-    final trackId = _currentTrackId!;
-    final now     = DateTime.now().millisecondsSinceEpoch;
-    final db      = ref.read(appDatabaseProvider);
+    final trackId = _currentTrackId;
 
-    await (db.update(db.tracksTable)..where((t) => t.id.equals(trackId))).write(
-      TracksTableCompanion(
-        status:     const Value('finished'),
-        finishedAt: Value(now),
-        durationS:  Value(state.elapsedSeconds),
-        distanceM:  Value(state.distanceM),
-        updatedAt:  Value(now),
-      ),
-    );
+    if (trackId != null) {
+      try {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final db  = ref.read(appDatabaseProvider);
+        await (db.update(db.tracksTable)..where((t) => t.id.equals(trackId))).write(
+          TracksTableCompanion(
+            status:     const Value('finished'),
+            finishedAt: Value(now),
+            durationS:  Value(state.elapsedSeconds),
+            distanceM:  Value(state.distanceM),
+            updatedAt:  Value(now),
+          ),
+        );
+      } catch (_) {
+        // DB unavailable (e.g. isolate closed after hot restart) — continue to reset state
+      }
+    }
 
-    ref.read(trackingStatusProvider.notifier).state = TrackingStatus.finished;
+    ref.read(trackingStatusProvider.notifier).state = TrackingStatus.idle;
     state = const TrackingState();
     _currentTrackId = null;
 

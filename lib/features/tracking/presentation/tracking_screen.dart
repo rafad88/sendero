@@ -146,7 +146,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     if (confirmed == true && mounted) {
       final trackId = await ref.read(trackingNotifierProvider.notifier).stopRecording();
       ref.read(plannedRouteIdProvider.notifier).state = null;
-      if (mounted) context.go('/tracking/save', extra: trackId);
+      if (!mounted) return;
+      if (trackId != null) {
+        context.go('/tracking/save', extra: trackId);
+      } else {
+        context.go('/map');
+      }
     }
   }
 }
