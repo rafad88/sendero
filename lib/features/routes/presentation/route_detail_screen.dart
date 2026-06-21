@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +26,13 @@ class RouteDetailScreen extends ConsumerWidget {
       );
     }
 
+    void openMap(List<LatLng> points) => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _FullscreenRouteMap(name: route.name, points: points),
+      ),
+    );
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -40,21 +49,21 @@ class RouteDetailScreen extends ConsumerWidget {
                 error: (_, __) => Container(color: AppColors.forestGreen.withOpacity(0.2)),
                 data: (data) => data.points.isEmpty
                     ? Container(color: AppColors.forestGreen.withOpacity(0.2))
-                    : _RouteMapPreview(
-                        points: data.points,
-                        onExpand: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => _FullscreenRouteMap(
-                              name: route.name,
-                              points: data.points,
-                            ),
-                          ),
-                        ),
-                      ),
+                    : _RouteMapPreview(points: data.points),
               ),
             ),
+            // Fullscreen button in the app bar — avoids CustomScrollView swallowing taps
             actions: [
+              dataAV.maybeWhen(
+                data: (data) => data.points.isEmpty
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        icon: const Icon(Icons.fullscreen),
+                        tooltip: 'Full map',
+                        onPressed: () => openMap(data.points),
+                      ),
+                orElse: () => const SizedBox.shrink(),
+              ),
               IconButton(icon: const Icon(Icons.bookmark_outline), onPressed: () {}),
               IconButton(icon: const Icon(Icons.share),             onPressed: () {}),
             ],
@@ -90,6 +99,10 @@ class RouteDetailScreen extends ConsumerWidget {
                   ),
 
                   const Divider(height: 32),
+
+                  Text(route.name, style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
 
                   Row(children: [
                     ...List.generate(5, (i) {
@@ -153,60 +166,32 @@ class RouteDetailScreen extends ConsumerWidget {
   }
 }
 
-// ── Map preview inside the collapsible header ────────────────────────────────
+// ── Static map preview in the collapsible header ─────────────────────────────
 
 class _RouteMapPreview extends StatelessWidget {
-  const _RouteMapPreview({required this.points, required this.onExpand});
+  const _RouteMapPreview({required this.points});
   final List<LatLng> points;
-  final VoidCallback onExpand;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return FlutterMap(
+      options: MapOptions(
+        initialCenter: _center(points),
+        initialZoom: 13,
+        interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+      ),
       children: [
-        FlutterMap(
-          options: MapOptions(
-            initialCenter: _center(points),
-            initialZoom: 13,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.none,
-            ),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'app.sendero.sendero',
-            ),
-            PolylineLayer(polylines: [
-              Polyline(
-                points: points,
-                color: AppColors.trailOrange,
-                strokeWidth: 3,
-              ),
-            ]),
-            MarkerLayer(markers: [
-              _dot(points.first, Colors.green),
-              _dot(points.last,  AppColors.trailOrange),
-            ]),
-          ],
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'app.sendero.sendero',
         ),
-
-        Positioned(
-          right: 8,
-          bottom: 8,
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: onExpand,
-              child: const Padding(
-                padding: EdgeInsets.all(6),
-                child: Icon(Icons.fullscreen, size: 22),
-              ),
-            ),
-          ),
-        ),
+        PolylineLayer(polylines: [
+          Polyline(points: points, color: AppColors.trailOrange, strokeWidth: 3),
+        ]),
+        MarkerLayer(markers: [
+          _dot(points.first, Colors.green),
+          _dot(points.last,  AppColors.trailOrange),
+        ]),
       ],
     );
   }
@@ -226,7 +211,7 @@ class _RouteMapPreview extends StatelessWidget {
   );
 }
 
-// ── Fullscreen interactive map ───────────────────────────────────────────────
+// ── Fullscreen map with playback controls ────────────────────────────────────
 
 class _FullscreenRouteMap extends StatefulWidget {
   const _FullscreenRouteMap({required this.name, required this.points});
@@ -240,83 +225,227 @@ class _FullscreenRouteMap extends StatefulWidget {
 class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
   final _mapController = MapController();
 
+  int  _playIndex  = 0;
+  bool _isPlaying  = false;
+  Timer? _timer;
+
+  // Advance ~1 point every 80 ms → full route in ~58 s for 729 pts
+  static const _tickMs    = 80;
+  static const _step      = 1;
+
+  int get _last => widget.points.length - 1;
+  double get _progress => _last == 0 ? 0 : _playIndex / _last;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _play() {
+    if (_playIndex >= _last) _playIndex = 0; // restart if at end
+    setState(() => _isPlaying = true);
+    _timer = Timer.periodic(const Duration(milliseconds: _tickMs), (_) {
+      if (!mounted) return;
+      setState(() {
+        _playIndex = (_playIndex + _step).clamp(0, _last);
+        if (_playIndex >= _last) _pause();
+      });
+      _mapController.move(widget.points[_playIndex], _mapController.camera.zoom);
+    });
+  }
+
+  void _pause() {
+    _timer?.cancel();
+    _timer = null;
+    if (mounted) setState(() => _isPlaying = false);
+  }
+
+  void _stop() {
+    _timer?.cancel();
+    _timer = null;
+    setState(() {
+      _isPlaying  = false;
+      _playIndex  = 0;
+    });
+    _mapController.move(_center(widget.points), 13);
+  }
+
+  void _seekTo(double value) {
+    _pause();
+    setState(() => _playIndex = (value * _last).round().clamp(0, _last));
+    _mapController.move(widget.points[_playIndex], _mapController.camera.zoom);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pts     = widget.points;
+    final current = pts[_playIndex];
+    final walked  = pts.sublist(0, _playIndex + 1);
+
     return Scaffold(
       body: Stack(
         children: [
+          // ── Map ────────────────────────────────────────────────────────────
           FlutterMap(
             mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _center(widget.points),
-              initialZoom: 13,
-            ),
+            options: MapOptions(initialCenter: _center(pts), initialZoom: 13),
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'app.sendero.sendero',
               ),
+              // Full route in grey
               PolylineLayer(polylines: [
-                Polyline(
-                  points: widget.points,
-                  color: AppColors.trailOrange,
-                  strokeWidth: 4,
-                ),
+                Polyline(points: pts, color: Colors.grey.shade400, strokeWidth: 3),
               ]),
+              // Walked portion in orange
+              if (walked.length > 1)
+                PolylineLayer(polylines: [
+                  Polyline(points: walked, color: AppColors.trailOrange, strokeWidth: 4),
+                ]),
               MarkerLayer(markers: [
-                _RouteMapPreview._dot(widget.points.first, Colors.green),
-                _RouteMapPreview._dot(widget.points.last,  AppColors.trailOrange),
+                _RouteMapPreview._dot(pts.first, Colors.green),
+                _RouteMapPreview._dot(pts.last,  Colors.grey),
+                // Current position
+                Marker(
+                  point: current,
+                  width: 20,
+                  height: 20,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.trailOrange,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black45)],
+                    ),
+                  ),
+                ),
               ]),
             ],
           ),
 
-          // Back button
+          // ── Back button ────────────────────────────────────────────────────
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(8),
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                elevation: 2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () => Navigator.pop(context),
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(Icons.arrow_back),
-                  ),
-                ),
-              ),
+              child: _MapBtn(icon: Icons.arrow_back, onTap: () => Navigator.pop(context)),
             ),
           ),
 
-          // Zoom controls
+          // ── Zoom controls ──────────────────────────────────────────────────
           Positioned(
             right: 12,
-            bottom: 48,
+            bottom: 160,
             child: Column(
               children: [
-                _MapBtn(
-                  icon: Icons.add,
-                  onTap: () => _mapController.move(
-                    _mapController.camera.center,
-                    _mapController.camera.zoom + 1,
-                  ),
-                ),
+                _MapBtn(icon: Icons.add, onTap: () => _mapController.move(
+                  _mapController.camera.center, _mapController.camera.zoom + 1)),
                 const SizedBox(height: 8),
-                _MapBtn(
-                  icon: Icons.remove,
-                  onTap: () => _mapController.move(
-                    _mapController.camera.center,
-                    _mapController.camera.zoom - 1,
-                  ),
-                ),
+                _MapBtn(icon: Icons.remove, onTap: () => _mapController.move(
+                  _mapController.camera.center, _mapController.camera.zoom - 1)),
                 const SizedBox(height: 8),
-                _MapBtn(
-                  icon: Icons.center_focus_strong,
-                  onTap: () => _mapController.move(_center(widget.points), 13),
-                ),
+                _MapBtn(icon: Icons.center_focus_strong,
+                  onTap: () => _mapController.move(_center(pts), 13)),
               ],
+            ),
+          ),
+
+          // ── Playback bar ───────────────────────────────────────────────────
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: const [BoxShadow(blurRadius: 12, color: Colors.black26)],
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Progress slider
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor:   AppColors.trailOrange,
+                      inactiveTrackColor: Colors.grey.shade300,
+                      thumbColor:         AppColors.trailOrange,
+                      overlayColor:       AppColors.trailOrange.withOpacity(0.2),
+                      trackHeight: 4,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                    ),
+                    child: Slider(
+                      value: _progress,
+                      onChanged: _seekTo,
+                    ),
+                  ),
+
+                  // Progress labels
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${(_progress * 100).toStringAsFixed(0)}%',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        Text(
+                          widget.name,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Stop
+                      IconButton(
+                        icon: const Icon(Icons.stop_circle_outlined),
+                        iconSize: 36,
+                        color: Colors.grey.shade600,
+                        onPressed: _stop,
+                        tooltip: 'Stop',
+                      ),
+                      const SizedBox(width: 24),
+                      // Play / Pause
+                      SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: Material(
+                          color: AppColors.trailOrange,
+                          shape: const CircleBorder(),
+                          elevation: 4,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _isPlaying ? _pause : _play,
+                            child: Icon(
+                              _isPlaying ? Icons.pause : Icons.play_arrow,
+                              size: 32,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      // Center on current position
+                      IconButton(
+                        icon: const Icon(Icons.my_location),
+                        iconSize: 36,
+                        color: Colors.grey.shade600,
+                        onPressed: () => _mapController.move(current, _mapController.camera.zoom),
+                        tooltip: 'Center on position',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -324,6 +453,8 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
     );
   }
 }
+
+// ── Reusable map button ───────────────────────────────────────────────────────
 
 class _MapBtn extends StatelessWidget {
   const _MapBtn({required this.icon, required this.onTap});
@@ -338,15 +469,12 @@ class _MapBtn extends StatelessWidget {
     child: InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Icon(icon, size: 22),
-      ),
+      child: Padding(padding: const EdgeInsets.all(8), child: Icon(icon, size: 22)),
     ),
   );
 }
 
-// ── Elevation modal ──────────────────────────────────────────────────────────
+// ── Elevation modal ───────────────────────────────────────────────────────────
 
 void _showElevationModal(BuildContext context, RouteData data) {
   showDialog<void>(
@@ -358,30 +486,21 @@ void _showElevationModal(BuildContext context, RouteData data) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Elevation',
-              style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
+            Text('Elevation',
+              style: Theme.of(dialogContext).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
-            _ElevationRow(
-              icon: Icons.arrow_upward,
-              color: AppColors.forestGreen,
-              label: 'Ascent',
-              value: '+${data.elevationGainM} m',
-            ),
+            _ElevationRow(icon: Icons.arrow_upward,  color: AppColors.forestGreen,
+              label: 'Ascent',  value: '+${data.elevationGainM} m'),
             const SizedBox(height: 12),
-            _ElevationRow(
-              icon: Icons.arrow_downward,
-              color: Colors.redAccent,
-              label: 'Descent',
-              value: '-${data.elevationLossM} m',
-            ),
+            _ElevationRow(icon: Icons.arrow_downward, color: Colors.redAccent,
+              label: 'Descent', value: '-${data.elevationLossM} m'),
             const Divider(height: 28),
             _ElevationRow(
-              icon: Icons.swap_vert,
-              color: Colors.grey,
+              icon: Icons.swap_vert, color: Colors.grey,
               label: 'Net gain',
-              value: '${data.elevationGainM - data.elevationLossM >= 0 ? '+' : ''}${data.elevationGainM - data.elevationLossM} m',
+              value: '${data.elevationGainM - data.elevationLossM >= 0 ? '+' : ''}'
+                     '${data.elevationGainM - data.elevationLossM} m',
             ),
             const SizedBox(height: 20),
             TextButton(
@@ -396,50 +515,35 @@ void _showElevationModal(BuildContext context, RouteData data) {
 }
 
 class _ElevationRow extends StatelessWidget {
-  const _ElevationRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
+  const _ElevationRow({required this.icon, required this.color,
+      required this.label, required this.value});
   final IconData icon;
   final Color color;
   final String label;
   final String value;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Text(label, style: Theme.of(context).textTheme.bodyMedium),
-        const Spacer(),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      const SizedBox(width: 12),
+      Text(label, style: Theme.of(context).textTheme.bodyMedium),
+      const Spacer(),
+      Text(value, style: Theme.of(context).textTheme.titleMedium
+          ?.copyWith(color: color, fontWeight: FontWeight.bold)),
+    ],
+  );
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 LatLng _center(List<LatLng> pts) {
-  final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
+  final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b)  / pts.length;
   final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
   return LatLng(lat, lng);
 }
@@ -460,12 +564,10 @@ class _StatBlock extends StatelessWidget {
           Icon(icon, size: 18, color: AppColors.forestGreen)
         else
           Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: AppColors.forestGreen, fontWeight: FontWeight.bold,
-          )),
+            color: AppColors.forestGreen, fontWeight: FontWeight.bold)),
         if (icon != null)
           Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.forestGreen, fontWeight: FontWeight.bold,
-          )),
+            color: AppColors.forestGreen, fontWeight: FontWeight.bold)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -478,7 +580,6 @@ class _StatBlock extends StatelessWidget {
         ),
       ],
     );
-
     if (onTap == null) return content;
     return GestureDetector(onTap: onTap, child: content);
   }
