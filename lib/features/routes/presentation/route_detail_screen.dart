@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart' hide RouteData;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../tracking/providers/tracking_provider.dart';
 import '../providers/route_provider.dart';
 import 'explore_screen.dart' show routeShapeIcon;
 
@@ -40,7 +42,6 @@ class RouteDetailScreen extends ConsumerWidget {
             expandedHeight: 260,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(route.name),
               background: dataAV.when(
                 loading: () => Container(
                   color: AppColors.forestGreen.withOpacity(0.2),
@@ -154,7 +155,10 @@ class RouteDetailScreen extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: () => context.go('/tracking'),
+                onPressed: () {
+                  ref.read(plannedRouteIdProvider.notifier).state = routeId;
+                  context.go('/tracking');
+                },
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Start'),
               ),
@@ -225,16 +229,56 @@ class _FullscreenRouteMap extends StatefulWidget {
 class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
   final _mapController = MapController();
 
-  int  _playIndex  = 0;
-  bool _isPlaying  = false;
-  Timer? _timer;
+  int     _playIndex   = 0;
+  bool    _isPlaying   = false;
+  Timer?  _timer;
+  double  _zoom        = 14;
+  LatLng? _userLocation;
 
-  // Advance ~1 point every 80 ms → full route in ~58 s for 729 pts
-  static const _tickMs    = 80;
-  static const _step      = 1;
+  static const _tickMs = 80;
+  static const _step   = 1;
 
-  int get _last => widget.points.length - 1;
+  int    get _last     => widget.points.length - 1;
   double get _progress => _last == 0 ? 0 : _playIndex / _last;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[FullscreenMap] initState pts=${widget.points.length}'
+        ' first=${widget.points.isEmpty ? "EMPTY" : widget.points.first}');
+    _fetchGPS();
+  }
+
+  Future<void> _fetchGPS() async {
+    try {
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted) return;
+      setState(() => _userLocation = LatLng(pos.latitude, pos.longitude));
+    } catch (_) {}
+  }
+
+  // Returns the index of the route point closest to [target]
+  int _closestIndex(LatLng target) {
+    int best = 0;
+    double bestD = double.infinity;
+    for (int i = 0; i < widget.points.length; i++) {
+      final p = widget.points[i];
+      final d = (p.latitude - target.latitude) * (p.latitude - target.latitude) +
+                (p.longitude - target.longitude) * (p.longitude - target.longitude);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
 
   @override
   void dispose() {
@@ -242,16 +286,48 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
     super.dispose();
   }
 
+  void _fitRoute() {
+    debugPrint('[FullscreenMap] onMapReady fired pts=${widget.points.length}');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        debugPrint('[FullscreenMap] postFrame: NOT mounted, skip');
+        return;
+      }
+      final c = _center(widget.points);
+      debugPrint('[FullscreenMap] postFrame move → $c');
+      _mapController.move(c, 14);
+      _zoom = 14;
+    });
+  }
+
+  void _moveMap(LatLng point) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _mapController.move(point, _zoom);
+    });
+  }
+
   void _play() {
-    if (_playIndex >= _last) _playIndex = 0; // restart if at end
+    // Start from GPS position on the route if at the beginning
+    if (_playIndex == 0 && _userLocation != null) {
+      _playIndex = _closestIndex(_userLocation!);
+    } else if (_playIndex >= _last) {
+      _playIndex = 0;
+    }
+    _moveMap(widget.points[_playIndex]);
     setState(() => _isPlaying = true);
     _timer = Timer.periodic(const Duration(milliseconds: _tickMs), (_) {
       if (!mounted) return;
+      final next     = (_playIndex + _step).clamp(0, _last);
+      final finished = next >= _last;
       setState(() {
-        _playIndex = (_playIndex + _step).clamp(0, _last);
-        if (_playIndex >= _last) _pause();
+        _playIndex = next;
+        if (finished) {
+          _isPlaying = false;
+          _timer?.cancel();
+          _timer = null;
+        }
       });
-      _mapController.move(widget.points[_playIndex], _mapController.camera.zoom);
+      _moveMap(widget.points[next]);
     });
   }
 
@@ -265,16 +341,17 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
     _timer?.cancel();
     _timer = null;
     setState(() {
-      _isPlaying  = false;
-      _playIndex  = 0;
+      _isPlaying = false;
+      _playIndex = 0;
     });
-    _mapController.move(_center(widget.points), 13);
+    _moveMap(widget.points[0]);
   }
 
   void _seekTo(double value) {
     _pause();
-    setState(() => _playIndex = (value * _last).round().clamp(0, _last));
-    _mapController.move(widget.points[_playIndex], _mapController.camera.zoom);
+    final idx = (value * _last).round().clamp(0, _last);
+    setState(() => _playIndex = idx);
+    _moveMap(widget.points[idx]);
   }
 
   @override
@@ -289,7 +366,12 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
           // ── Map ────────────────────────────────────────────────────────────
           FlutterMap(
             mapController: _mapController,
-            options: MapOptions(initialCenter: _center(pts), initialZoom: 13),
+            options: MapOptions(
+              initialCenter: _center(pts),
+              initialZoom: 13,
+              onMapReady: _fitRoute,
+              onPositionChanged: (pos, _) => _zoom = pos.zoom,
+            ),
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -307,7 +389,7 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
               MarkerLayer(markers: [
                 _RouteMapPreview._dot(pts.first, Colors.green),
                 _RouteMapPreview._dot(pts.last,  Colors.grey),
-                // Current position
+                // Playback position
                 Marker(
                   point: current,
                   width: 20,
@@ -321,6 +403,21 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
                     ),
                   ),
                 ),
+                // GPS position
+                if (_userLocation != null)
+                  Marker(
+                    point: _userLocation!,
+                    width: 20,
+                    height: 20,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2.5),
+                        boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black45)],
+                      ),
+                    ),
+                  ),
               ]),
             ],
           ),
@@ -339,14 +436,27 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
             bottom: 160,
             child: Column(
               children: [
-                _MapBtn(icon: Icons.add, onTap: () => _mapController.move(
-                  _mapController.camera.center, _mapController.camera.zoom + 1)),
+                _MapBtn(icon: Icons.add, onTap: () {
+                  _zoom += 1;
+                  _mapController.move(_mapController.camera.center, _zoom);
+                }),
                 const SizedBox(height: 8),
-                _MapBtn(icon: Icons.remove, onTap: () => _mapController.move(
-                  _mapController.camera.center, _mapController.camera.zoom - 1)),
+                _MapBtn(icon: Icons.remove, onTap: () {
+                  _zoom -= 1;
+                  _mapController.move(_mapController.camera.center, _zoom);
+                }),
                 const SizedBox(height: 8),
-                _MapBtn(icon: Icons.center_focus_strong,
-                  onTap: () => _mapController.move(_center(pts), 13)),
+                _MapBtn(
+                  icon: Icons.fit_screen,
+                  onTap: () => _fitRoute(),
+                ),
+                const SizedBox(height: 8),
+                _MapBtn(
+                  icon: Icons.my_location,
+                  onTap: () {
+                    if (_userLocation != null) _mapController.move(_userLocation!, _zoom);
+                  },
+                ),
               ],
             ),
           ),
@@ -439,8 +549,8 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
                         icon: const Icon(Icons.my_location),
                         iconSize: 36,
                         color: Colors.grey.shade600,
-                        onPressed: () => _mapController.move(current, _mapController.camera.zoom),
-                        tooltip: 'Center on position',
+                        onPressed: () => _moveMap(current),
+                        tooltip: 'Center on playback',
                       ),
                     ],
                   ),

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../routes/providers/route_provider.dart';
 import '../providers/tracking_provider.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,7 @@ class TrackingScreen extends ConsumerStatefulWidget {
 class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   final MapController _mapController = MapController();
   Timer? _uiTimer;
+  bool _mapReady = false;
 
   @override
   void initState() {
@@ -32,6 +35,24 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ref.read(trackingNotifierProvider.notifier).startRecording(activityType: activityType);
       }
     });
+    _centerOnGPS();
+  }
+
+  Future<void> _centerOnGPS() async {
+    try {
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted || !_mapReady) return;
+      _mapController.move(LatLng(pos.latitude, pos.longitude), 15);
+    } catch (_) {}
   }
 
   @override
@@ -42,7 +63,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tracking = ref.watch(trackingNotifierProvider);
+    final tracking      = ref.watch(trackingNotifierProvider);
+    final plannedId     = ref.watch(plannedRouteIdProvider);
+    final plannedDataAV = plannedId != null
+        ? ref.watch(routeDataProvider(plannedId))
+        : null;
+    final plannedPoints = plannedDataAV?.valueOrNull?.points ?? [];
 
     return Scaffold(
       body: Stack(
@@ -51,14 +77,28 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(40.416775, -3.703790),
-              initialZoom: 14,
+              initialZoom: 15,
+              onMapReady: () {
+                _mapReady = true;
+                _centerOnGPS();
+              },
             ),
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'app.sendero.sendero',
               ),
+              // Planned route guide in green
+              if (plannedPoints.length > 1)
+                PolylineLayer(polylines: [
+                  Polyline(
+                    points: plannedPoints,
+                    color: AppColors.forestGreen.withOpacity(0.7),
+                    strokeWidth: 4,
+                  ),
+                ]),
               CurrentLocationLayer(),
+              // Actual tracked path in orange
               if (tracking.recentPoints.length > 1)
                 PolylineLayer(
                   polylines: [
@@ -105,6 +145,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
     if (confirmed == true && mounted) {
       final trackId = await ref.read(trackingNotifierProvider.notifier).stopRecording();
+      ref.read(plannedRouteIdProvider.notifier).state = null;
       if (mounted) context.go('/tracking/save', extra: trackId);
     }
   }

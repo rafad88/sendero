@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -17,6 +18,31 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   final MapController _mapController = MapController();
+  bool _mapReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _centerOnGPS();
+  }
+
+  Future<void> _centerOnGPS() async {
+    try {
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted || !_mapReady) return;
+      _mapController.move(LatLng(pos.latitude, pos.longitude), 15);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +55,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(40.416775, -3.703790),
-              initialZoom: 12,
+              initialZoom: 6,
+              onMapReady: () {
+                _mapReady = true;
+                _centerOnGPS();
+              },
             ),
             children: [
               TileLayer(
@@ -74,7 +104,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               heroTag: 'locate',
               backgroundColor: Colors.white,
               foregroundColor: AppColors.forestGreen,
-              onPressed: _locateMe,
+              onPressed: _centerOnGPS,
               child: const Icon(Icons.my_location),
             ),
           ),
@@ -90,10 +120,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
-  }
-
-  void _locateMe() {
-    // Will center on current location once geolocator provides a fix
   }
 
   void _startTracking(BuildContext context) {

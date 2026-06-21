@@ -15,6 +15,9 @@ final selectedActivityTypeProvider = StateProvider<String>((ref) => 'hike');
 
 final trackingStatusProvider = StateProvider<TrackingStatus>((ref) => TrackingStatus.idle);
 
+/// Route ID to follow during the current tracking session. Null = free tracking.
+final plannedRouteIdProvider = StateProvider<String?>((ref) => null);
+
 @riverpod
 class TrackingNotifier extends _$TrackingNotifier {
   StreamSubscription<Position>? _positionSub;
