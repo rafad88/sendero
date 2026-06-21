@@ -7,7 +7,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart' hide RouteData;
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../offline/providers/offline_provider.dart';
 import '../../tracking/providers/tracking_provider.dart';
 import '../providers/route_provider.dart';
 import 'explore_screen.dart' show routeShapeIcon;
@@ -141,30 +143,17 @@ class RouteDetailScreen extends ConsumerWidget {
         ],
       ),
 
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.download_outlined),
-                label: const Text('Download'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () {
-                  ref.read(plannedRouteIdProvider.notifier).state = routeId;
-                  context.go('/tracking');
-                },
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start'),
-              ),
-            ),
-          ],
+      bottomNavigationBar: dataAV.maybeWhen(
+        data: (data) => _BottomBar(
+          routeId: routeId,
+          routeName: route.name,
+          points: data.points,
+          onStart: () {
+            ref.read(plannedRouteIdProvider.notifier).state = routeId;
+            context.go('/tracking');
+          },
         ),
+        orElse: () => const SizedBox.shrink(),
       ),
     );
   }
@@ -186,7 +175,7 @@ class _RouteMapPreview extends StatelessWidget {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+          urlTemplate: Env.tileUrl,
           userAgentPackageName: 'app.sendero.sendero',
         ),
         PolylineLayer(polylines: [
@@ -374,7 +363,7 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+                urlTemplate: Env.tileUrl,
                 userAgentPackageName: 'app.sendero.sendero',
               ),
               // Full route in grey
@@ -657,6 +646,118 @@ LatLng _center(List<LatLng> pts) {
   final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
   return LatLng(lat, lng);
 }
+
+// ── Bottom action bar with real download ─────────────────────────────────────
+
+class _BottomBar extends ConsumerWidget {
+  const _BottomBar({
+    required this.routeId,
+    required this.routeName,
+    required this.points,
+    required this.onStart,
+  });
+
+  final String routeId;
+  final String routeName;
+  final List<LatLng> points;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadState  = ref.watch(offlineNotifierProvider);
+    final downloadedAV   = ref.watch(routeDownloadedProvider(routeId));
+    final isDownloaded   = downloadedAV.valueOrNull ?? false;
+    final isThisDownloading = downloadState.isDownloading;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isThisDownloading) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: downloadState.progress,
+                    backgroundColor: Colors.grey.shade200,
+                    color: AppColors.forestGreen,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${(downloadState.progress * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${downloadState.downloaded}/${downloadState.total} tiles · ${_formatBytes(downloadState.sizeBytes)}',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                GestureDetector(
+                  onTap: () => ref.read(offlineNotifierProvider.notifier).cancel(),
+                  child: const Text('Cancel', style: TextStyle(fontSize: 11, color: Colors.red)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: isDownloaded
+                    ? OutlinedButton.icon(
+                        onPressed: () => ref
+                            .read(offlineNotifierProvider.notifier)
+                            .deleteRoute(routeId),
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        label: const Text('Borrar offline', style: TextStyle(color: Colors.red)),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: isThisDownloading
+                            ? null
+                            : () => ref
+                                .read(offlineNotifierProvider.notifier)
+                                .downloadRoute(
+                                  routeId: routeId,
+                                  routeName: routeName,
+                                  points: points,
+                                ),
+                        icon: Icon(
+                          isThisDownloading ? Icons.hourglass_bottom : Icons.download_outlined,
+                        ),
+                        label: Text(isThisDownloading ? 'Descargando...' : 'Offline'),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onStart,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Iniciar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _StatBlock extends StatelessWidget {
   const _StatBlock({required this.label, required this.value, this.icon, this.onTap});

@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../routes/providers/route_provider.dart';
 import '../providers/tracking_provider.dart';
@@ -85,7 +86,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+                urlTemplate: Env.tileUrl,
                 userAgentPackageName: 'app.sendero.sendero',
               ),
               // Planned route guide in green

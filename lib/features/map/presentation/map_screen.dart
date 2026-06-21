@@ -6,7 +6,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart' hide RouteData;
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/env.dart';
+import '../../../core/map/hybrid_tile_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../offline/providers/connectivity_provider.dart';
 import '../../routes/providers/route_provider.dart';
 import '../../tracking/providers/tracking_provider.dart';
 
@@ -48,6 +51,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final isTracking = ref.watch(trackingStatusProvider) == TrackingStatus.recording;
+    final isOnline   = ref.watch(isOnlineProvider);
 
     // Build route start markers from local routes
     final routeMarkers = <Marker>[];
@@ -83,8 +87,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+                urlTemplate: Env.tileUrl,
                 userAgentPackageName: 'app.sendero.sendero',
+                tileProvider: HybridTileProvider(offlineRouteId: null),
               ),
               if (routeMarkers.isNotEmpty)
                 MarkerLayer(markers: routeMarkers),
@@ -117,6 +122,32 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
           ),
+
+          // Offline indicator
+          if (!isOnline)
+            Positioned(
+              top: 70,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.wifi_off, color: Colors.white, size: 14),
+                      SizedBox(width: 6),
+                      Text('Modo offline', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // Locate me button
           Positioned(
