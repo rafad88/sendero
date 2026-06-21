@@ -186,7 +186,7 @@ class _RouteMapPreview extends StatelessWidget {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'app.sendero.sendero',
         ),
         PolylineLayer(polylines: [
@@ -374,7 +374,7 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'app.sendero.sendero',
               ),
               // Full route in grey

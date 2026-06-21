@@ -85,7 +85,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'app.sendero.sendero',
               ),
               // Planned route guide in green

@@ -83,7 +83,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'app.sendero.sendero',
               ),
               if (routeMarkers.isNotEmpty)
