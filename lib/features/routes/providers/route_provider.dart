@@ -14,12 +14,14 @@ class RouteData {
     required this.points,
     required this.distanceKm,
     required this.elevationGainM,
+    required this.elevationLossM,
     required this.estimatedTimeMin,
   });
 
   final List<LatLng> points;
   final double distanceKm;
   final int elevationGainM;
+  final int elevationLossM;
   final int estimatedTimeMin;
 
   String get estimatedTimeLabel {
@@ -40,7 +42,7 @@ const _difficultyMultiplier = {
 
 final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId) async {
   final route = routeById(routeId);
-  if (route == null) return const RouteData(points: [], distanceKm: 0, elevationGainM: 0, estimatedTimeMin: 0);
+  if (route == null) return const RouteData(points: [], distanceKm: 0, elevationGainM: 0, elevationLossM: 0, estimatedTimeMin: 0);
 
   final raw = await rootBundle.loadString(route.gpxAsset);
   final gpx = GpxReader().fromString(raw);
@@ -59,14 +61,16 @@ final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId
     distanceM += _haversineM(points[i - 1], points[i]);
   }
 
-  // Elevation gain (sum of positive ascent only)
+  // Elevation gain and loss
   double gainM = 0;
+  double lossM = 0;
   for (var i = 1; i < trkpts.length; i++) {
     final prev = trkpts[i - 1].ele;
     final curr = trkpts[i].ele;
-    if (prev != null && curr != null && curr > prev) {
-      gainM += curr - prev;
-    }
+    if (prev == null || curr == null) continue;
+    final diff = curr - prev;
+    if (diff > 0) gainM += diff;
+    if (diff < 0) lossM += diff.abs();
   }
 
   // Naismith's rule: 1h per 4 km + 1h per 600 m gain
@@ -78,6 +82,7 @@ final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId
     points:           points,
     distanceKm:       double.parse((distanceM / 1000).toStringAsFixed(1)),
     elevationGainM:   gainM.round(),
+    elevationLossM:   lossM.round(),
     estimatedTimeMin: totalMin,
   );
 });

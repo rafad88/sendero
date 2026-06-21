@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:go_router/go_router.dart' hide RouteData;
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../providers/route_provider.dart';
+import 'explore_screen.dart' show routeShapeIcon;
 
 class RouteDetailScreen extends ConsumerWidget {
   const RouteDetailScreen({required this.routeId, super.key});
@@ -72,9 +73,18 @@ class RouteDetailScreen extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _StatBlock(label: 'Distance',   value: '${data.distanceKm} km'),
-                        _StatBlock(label: 'Elevation',  value: '+${data.elevationGainM} m'),
+                        _StatBlock(
+                          label: 'Elevation',
+                          value: '+${data.elevationGainM} m',
+                          onTap: () => _showElevationModal(context, data),
+                        ),
                         _StatBlock(label: 'Est. Time',  value: data.estimatedTimeLabel),
                         _StatBlock(label: 'Difficulty', value: route.difficulty),
+                        _StatBlock(
+                          label: 'Type',
+                          value: route.shape.label,
+                          icon: routeShapeIcon(route.shape),
+                        ),
                       ],
                     ),
                   ),
@@ -336,6 +346,96 @@ class _MapBtn extends StatelessWidget {
   );
 }
 
+// ── Elevation modal ──────────────────────────────────────────────────────────
+
+void _showElevationModal(BuildContext context, RouteData data) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Elevation',
+              style: Theme.of(dialogContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            _ElevationRow(
+              icon: Icons.arrow_upward,
+              color: AppColors.forestGreen,
+              label: 'Ascent',
+              value: '+${data.elevationGainM} m',
+            ),
+            const SizedBox(height: 12),
+            _ElevationRow(
+              icon: Icons.arrow_downward,
+              color: Colors.redAccent,
+              label: 'Descent',
+              value: '-${data.elevationLossM} m',
+            ),
+            const Divider(height: 28),
+            _ElevationRow(
+              icon: Icons.swap_vert,
+              color: Colors.grey,
+              label: 'Net gain',
+              value: '${data.elevationGainM - data.elevationLossM >= 0 ? '+' : ''}${data.elevationGainM - data.elevationLossM} m',
+            ),
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ElevationRow extends StatelessWidget {
+  const _ElevationRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const Spacer(),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 LatLng _center(List<LatLng> pts) {
@@ -345,17 +445,41 @@ LatLng _center(List<LatLng> pts) {
 }
 
 class _StatBlock extends StatelessWidget {
-  const _StatBlock({required this.label, required this.value});
+  const _StatBlock({required this.label, required this.value, this.icon, this.onTap});
   final String label;
   final String value;
+  final IconData? icon;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: AppColors.forestGreen, fontWeight: FontWeight.bold,
-      )),
-      Text(label, style: Theme.of(context).textTheme.labelSmall),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null)
+          Icon(icon, size: 18, color: AppColors.forestGreen)
+        else
+          Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppColors.forestGreen, fontWeight: FontWeight.bold,
+          )),
+        if (icon != null)
+          Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppColors.forestGreen, fontWeight: FontWeight.bold,
+          )),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+            if (onTap != null) ...[
+              const SizedBox(width: 2),
+              Icon(Icons.info_outline, size: 11, color: Colors.grey.shade400),
+            ],
+          ],
+        ),
+      ],
+    );
+
+    if (onTap == null) return content;
+    return GestureDetector(onTap: onTap, child: content);
+  }
 }

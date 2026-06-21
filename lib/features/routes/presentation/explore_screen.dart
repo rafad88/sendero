@@ -5,6 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/route_provider.dart';
 
+IconData routeShapeIcon(RouteShape shape) => switch (shape) {
+  RouteShape.circular      => Icons.loop,
+  RouteShape.linearOneWay  => Icons.arrow_forward,
+  RouteShape.linearOutBack => Icons.swap_horiz,
+};
+
 class ExploreScreen extends ConsumerStatefulWidget {
   const ExploreScreen({super.key});
 
@@ -15,6 +21,7 @@ class ExploreScreen extends ConsumerStatefulWidget {
 class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   final _searchController = TextEditingController();
   String _selectedActivity = 'all';
+  RouteShape? _selectedShape;
 
   @override
   void dispose() {
@@ -26,8 +33,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final query = _searchController.text.toLowerCase();
     return localRoutes.where((r) {
       final matchesActivity = _selectedActivity == 'all' || r.activityType == _selectedActivity;
-      final matchesQuery = query.isEmpty || r.name.toLowerCase().contains(query);
-      return matchesActivity && matchesQuery;
+      final matchesShape    = _selectedShape == null || r.shape == _selectedShape;
+      final matchesQuery    = query.isEmpty || r.name.toLowerCase().contains(query);
+      return matchesActivity && matchesShape && matchesQuery;
     }).toList();
   }
 
@@ -53,7 +61,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       ),
       body: Column(
         children: [
-          // Activity filter chips
+          // Activity + shape filter chips
           SizedBox(
             height: 48,
             child: ListView(
@@ -72,6 +80,21 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       label: Text(label),
                       selected: _selectedActivity == type,
                       onSelected: (_) => setState(() => _selectedActivity = type),
+                      selectedColor: AppColors.forestGreen.withOpacity(0.2),
+                    ),
+                  ),
+                const VerticalDivider(indent: 6, endIndent: 6),
+                const SizedBox(width: 8),
+                for (final shape in RouteShape.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      avatar: Icon(routeShapeIcon(shape), size: 16),
+                      label: Text(shape.label),
+                      selected: _selectedShape == shape,
+                      onSelected: (_) => setState(() =>
+                        _selectedShape = _selectedShape == shape ? null : shape,
+                      ),
                       selectedColor: AppColors.forestGreen.withOpacity(0.2),
                     ),
                   ),
@@ -156,6 +179,10 @@ class _RouteCard extends ConsumerWidget {
                     ),
                     child: Text(route.difficulty, style: TextStyle(color: color, fontSize: 12)),
                   ),
+                  const SizedBox(width: 8),
+                  Icon(routeShapeIcon(route.shape), size: 14, color: Colors.grey),
+                  const SizedBox(width: 3),
+                  Text(route.shape.label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(width: 12),
                   dataAV.when(
                     loading: () => const SizedBox(
