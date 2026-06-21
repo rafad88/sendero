@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:latlong2/latlong.dart';
 
-import '../../../core/config/env.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../tracking/providers/tracking_provider.dart';
 
@@ -15,7 +16,7 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  MapLibreMapController? _mapController;
+  final MapController _mapController = MapController();
 
   @override
   Widget build(BuildContext context) {
@@ -24,17 +25,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          MapLibreMap(
-            styleString: Env.openFreeMapStyle,
-            myLocationEnabled: true,
-            myLocationTrackingMode: MyLocationTrackingMode.tracking,
-            compassEnabled: true,
-            onMapCreated: (controller) => _mapController = controller,
-            onStyleLoadedCallback: _onStyleLoaded,
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(40.416775, -3.703790), // Madrid default
-              zoom: 12,
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(40.416775, -3.703790),
+              initialZoom: 12,
             ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'app.sendero.sendero',
+              ),
+              CurrentLocationLayer(),
+            ],
           ),
 
           // Top search bar
@@ -48,7 +51,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
                   ),
                   child: const Row(
                     children: [
@@ -78,7 +81,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ],
       ),
 
-      // Track FAB
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'track',
         onPressed: () => isTracking ? context.go('/tracking') : _startTracking(context),
@@ -90,16 +92,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  void _onStyleLoaded() {
-    // Map style loaded — add route layers, heatmap etc. in future iterations
-  }
-
   void _locateMe() {
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        const CameraPosition(target: LatLng(0, 0), zoom: 14),
-      ),
-    );
+    // Will center on current location once geolocator provides a fix
   }
 
   void _startTracking(BuildContext context) {
@@ -114,10 +108,10 @@ class _PreSessionSheet extends ConsumerWidget {
   const _PreSessionSheet();
 
   static const _activities = [
-    ('hike',   Icons.hiking,        'Hike'),
-    ('bike',   Icons.directions_bike, 'Bike'),
-    ('run',    Icons.directions_run, 'Run'),
-    ('ski',    Icons.downhill_skiing, 'Ski'),
+    ('hike', Icons.hiking,          'Hike'),
+    ('bike', Icons.directions_bike, 'Bike'),
+    ('run',  Icons.directions_run,  'Run'),
+    ('ski',  Icons.downhill_skiing, 'Ski'),
   ];
 
   @override

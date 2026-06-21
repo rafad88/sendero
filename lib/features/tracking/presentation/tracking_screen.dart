@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:latlong2/latlong.dart';
 
-import '../../../core/config/env.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/tracking_provider.dart';
 
@@ -16,16 +17,14 @@ class TrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _TrackingScreenState extends ConsumerState<TrackingScreen> {
-  MapLibreMapController? _mapController; // ignore: unused_field
+  final MapController _mapController = MapController();
   Timer? _uiTimer;
 
   @override
   void initState() {
     super.initState();
-    // Refresh elapsed time every second
     _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
 
-    // Auto-start if not already recording
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final status = ref.read(trackingStatusProvider);
       if (status == TrackingStatus.idle) {
@@ -48,33 +47,44 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Map
-          MapLibreMap(
-            styleString: Env.openFreeMapStyle,
-            myLocationEnabled: true,
-            myLocationTrackingMode: MyLocationTrackingMode.trackingCompass,
-            compassEnabled: true,
-            initialCameraPosition: const CameraPosition(target: LatLng(0, 0), zoom: 14),
-            onMapCreated: (c) => _mapController = c,
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(40.416775, -3.703790),
+              initialZoom: 14,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'app.sendero.sendero',
+              ),
+              CurrentLocationLayer(),
+              if (tracking.recentPoints.length > 1)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: tracking.recentPoints
+                          .map((p) => LatLng(p.lat, p.lon))
+                          .toList(),
+                      color: AppColors.trailOrange,
+                      strokeWidth: 4,
+                    ),
+                  ],
+                ),
+            ],
           ),
 
-          // Stats overlay (top)
           SafeArea(
             child: Column(
-              children: [
-                _StatsBar(tracking: tracking),
-              ],
+              children: [_StatsBar(tracking: tracking)],
             ),
           ),
 
-          // Controls (bottom)
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: _ControlBar(
-              onStop: () => _confirmStop(context),
-            ),
+            child: _ControlBar(onStop: () => _confirmStop(context)),
           ),
         ],
       ),
@@ -88,7 +98,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         title: const Text('Stop recording?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true),  child: const Text('Stop')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Stop')),
         ],
       ),
     );
@@ -106,22 +116,21 @@ class _StatsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final elapsed = tracking.elapsedSeconds;
-    final hours   = elapsed ~/ 3600;
-    final minutes = (elapsed % 3600) ~/ 60;
-    final seconds = elapsed % 60;
-    final timeStr = hours > 0
-        ? '${hours}h ${minutes.toString().padLeft(2,'0')}m'
-        : '${minutes.toString().padLeft(2,'0')}:${seconds.toString().padLeft(2,'0')}';
-
-    final distKm  = ((tracking.distanceM ?? 0) / 1000).toStringAsFixed(2);
-    final elevM   = tracking.elevationGainM.toStringAsFixed(0);
+    final elapsed  = tracking.elapsedSeconds;
+    final hours    = elapsed ~/ 3600;
+    final minutes  = (elapsed % 3600) ~/ 60;
+    final seconds  = elapsed % 60;
+    final timeStr  = hours > 0
+        ? '${hours}h ${minutes.toString().padLeft(2, '0')}m'
+        : '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    final distKm   = ((tracking.distanceM ?? 0) / 1000).toStringAsFixed(2);
+    final elevM    = tracking.elevationGainM.toStringAsFixed(0);
 
     return Container(
       margin: const EdgeInsets.all(12),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.75),
+        color: Colors.black.withAlpha(191),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -129,7 +138,7 @@ class _StatsBar extends StatelessWidget {
         children: [
           _Stat(label: 'Distance', value: '$distKm km'),
           _Stat(label: 'Time',     value: timeStr),
-          _Stat(label: 'Elevation',value: '+$elevM m'),
+          _Stat(label: 'Elevation', value: '+$elevM m'),
         ],
       ),
     );
@@ -146,7 +155,7 @@ class _Stat extends StatelessWidget {
     return Column(
       children: [
         Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
+        Text(label, style: TextStyle(color: Colors.white.withAlpha(178), fontSize: 12)),
       ],
     );
   }

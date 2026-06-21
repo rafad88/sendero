@@ -24,12 +24,20 @@ GoRouter appRouter(AppRouterRef ref) {
   return GoRouter(
     initialLocation: '/map',
     redirect: (context, state) {
-      final isLoggedIn    = authState.valueOrNull != null;
-      final isAuthRoute   = state.matchedLocation.startsWith('/auth');
-      final isOnboarding  = state.matchedLocation == '/onboarding';
+      final isLoggedIn   = authState.valueOrNull != null;
+      final isAuthRoute  = state.matchedLocation.startsWith('/auth');
+      final isOnboarding = state.matchedLocation == '/onboarding';
 
-      if (!isLoggedIn && !isAuthRoute && !isOnboarding) return '/onboarding';
+      // Auth route while logged in → go to map
       if (isLoggedIn && isAuthRoute) return '/map';
+      // Not logged in and trying to access auth-only routes → onboarding
+      // Map, explore, tracking are accessible as guest
+      if (!isLoggedIn && !isAuthRoute && !isOnboarding) {
+        final guestAllowed = state.matchedLocation.startsWith('/map') ||
+            state.matchedLocation.startsWith('/explore') ||
+            state.matchedLocation.startsWith('/tracking');
+        if (!guestAllowed) return '/onboarding';
+      }
       return null;
     },
     routes: [
