@@ -63,12 +63,7 @@ class OfflineNotifier extends StateNotifier<DownloadState> {
     if (state.isDownloading) return;
 
     final bounds = TileCalculator.boundsFromPoints(points);
-    final tiles  = TileCalculator.tilesForBounds(
-      minLat: bounds.minLat,
-      minLon: bounds.minLon,
-      maxLat: bounds.maxLat,
-      maxLon: bounds.maxLon,
-    );
+    final tiles  = TileCalculator.tilesForRoute(points: points);
 
     final tileDirPath = await TileDownloader.tileDirPath(routeId);
     final now         = DateTime.now().millisecondsSinceEpoch;
