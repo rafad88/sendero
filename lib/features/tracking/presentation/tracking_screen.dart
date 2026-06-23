@@ -94,8 +94,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 PolylineLayer(polylines: [
                   Polyline(
                     points: plannedPoints,
-                    color: AppColors.forestGreen.withOpacity(0.7),
-                    strokeWidth: 4,
+                    color: const Color(0xFF00C853),
+                    strokeWidth: 5,
+                    borderColor: Colors.white,
+                    borderStrokeWidth: 2,
                   ),
                 ]),
               CurrentLocationLayer(),
@@ -107,8 +109,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                       points: tracking.recentPoints
                           .map((p) => LatLng(p.lat, p.lon))
                           .toList(),
-                      color: AppColors.trailOrange,
-                      strokeWidth: 4,
+                      color: const Color(0xFFFF5722),
+                      strokeWidth: 5,
+                      borderColor: Colors.white,
+                      borderStrokeWidth: 2,
                     ),
                   ],
                 ),

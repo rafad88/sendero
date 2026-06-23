@@ -179,7 +179,13 @@ class _RouteMapPreview extends StatelessWidget {
           userAgentPackageName: 'app.sendero.sendero',
         ),
         PolylineLayer(polylines: [
-          Polyline(points: points, color: AppColors.trailOrange, strokeWidth: 3),
+          Polyline(
+            points: points,
+            color: const Color(0xFFFF5722),
+            strokeWidth: 5,
+            borderColor: Colors.white,
+            borderStrokeWidth: 2,
+          ),
         ]),
         MarkerLayer(markers: [
           _dot(points.first, Colors.green),
@@ -368,12 +374,24 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
               ),
               // Full route in grey
               PolylineLayer(polylines: [
-                Polyline(points: pts, color: Colors.grey.shade400, strokeWidth: 3),
+                Polyline(
+                  points: pts,
+                  color: Colors.white54,
+                  strokeWidth: 4,
+                  borderColor: Colors.grey.shade500,
+                  borderStrokeWidth: 1,
+                ),
               ]),
               // Walked portion in orange
               if (walked.length > 1)
                 PolylineLayer(polylines: [
-                  Polyline(points: walked, color: AppColors.trailOrange, strokeWidth: 4),
+                  Polyline(
+                    points: walked,
+                    color: const Color(0xFFFF5722),
+                    strokeWidth: 5,
+                    borderColor: Colors.white,
+                    borderStrokeWidth: 2,
+                  ),
                 ]),
               MarkerLayer(markers: [
                 _RouteMapPreview._dot(pts.first, Colors.green),
