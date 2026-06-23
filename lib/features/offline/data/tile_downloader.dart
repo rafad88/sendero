@@ -3,13 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/config/env.dart';
 import 'tile_calculator.dart';
 
 typedef ProgressCallback = void Function(int downloaded, int total, int bytes);
 
 class TileDownloader {
   static const _concurrency = 4;
-  static const _tileBaseUrl = 'https://tile.openstreetmap.org';
 
   bool _cancelled = false;
 
@@ -63,7 +63,10 @@ class TileDownloader {
     }
 
     try {
-      final url = '$_tileBaseUrl/${t.z}/${t.x}/${t.y}.png';
+      final url = Env.tileUrl
+          .replaceAll('{z}', '${t.z}')
+          .replaceAll('{x}', '${t.x}')
+          .replaceAll('{y}', '${t.y}');
       final response = await client.get(
         Uri.parse(url),
         headers: {'User-Agent': 'Sendero/1.0 (offline map download)'},

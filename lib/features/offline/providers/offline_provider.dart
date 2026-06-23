@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/database/app_database.dart';
 import '../data/offline_repository.dart';
 import '../data/tile_calculator.dart';
@@ -78,7 +79,7 @@ class OfflineNotifier extends StateNotifier<DownloadState> {
       bboxMaxLon:     bounds.maxLon,
       tilePath:       tileDirPath,
       sizeBytes:      0,
-      tileSourceUrl:  'https://tile.openstreetmap.org',
+      tileSourceUrl:  Env.tileUrl,
       tileVersion:    '1',
       downloadProgress: const Value(0.0),
       createdAt:      now,
