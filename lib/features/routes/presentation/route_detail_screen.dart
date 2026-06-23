@@ -182,9 +182,9 @@ class _RouteMapPreview extends StatelessWidget {
           Polyline(
             points: points,
             color: const Color(0xFFFF5722),
-            strokeWidth: 5,
+            strokeWidth: 3,
             borderColor: Colors.white,
-            borderStrokeWidth: 2,
+            borderStrokeWidth: 1,
           ),
         ]),
         MarkerLayer(markers: [
@@ -376,9 +376,9 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
               PolylineLayer(polylines: [
                 Polyline(
                   points: pts,
-                  color: Colors.white54,
-                  strokeWidth: 4,
-                  borderColor: Colors.grey.shade500,
+                  color: Colors.grey.shade400,
+                  strokeWidth: 3,
+                  borderColor: Colors.white,
                   borderStrokeWidth: 1,
                 ),
               ]),
@@ -388,9 +388,9 @@ class _FullscreenRouteMapState extends State<_FullscreenRouteMap> {
                   Polyline(
                     points: walked,
                     color: const Color(0xFFFF5722),
-                    strokeWidth: 5,
+                    strokeWidth: 3,
                     borderColor: Colors.white,
-                    borderStrokeWidth: 2,
+                    borderStrokeWidth: 1,
                   ),
                 ]),
               MarkerLayer(markers: [
