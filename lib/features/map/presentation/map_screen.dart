@@ -90,8 +90,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 userAgentPackageName: 'app.sendero.sendero',
                 tileProvider: HybridTileProvider(offlineRouteId: null),
               ),
-              if (routeMarkers.isNotEmpty)
-                MarkerLayer(markers: routeMarkers),
+              MarkerLayer(markers: routeMarkers),
               CurrentLocationLayer(),
             ],
           ),
