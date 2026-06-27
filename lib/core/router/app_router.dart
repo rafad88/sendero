@@ -43,14 +43,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute  = loc.startsWith('/auth');
       final isOnboarding = loc == '/onboarding';
 
-      if (isLoggedIn && isAuthRoute) return '/map';
-
-      if (!isLoggedIn && !isAuthRoute && !isOnboarding) {
-        final guestAllowed = loc.startsWith('/map') ||
-            loc.startsWith('/explore') ||
-            loc.startsWith('/tracking');
-        if (!guestAllowed) return '/onboarding';
-      }
+      if (isLoggedIn && (isAuthRoute || isOnboarding)) return '/map';
+      if (!isLoggedIn && !isAuthRoute && !isOnboarding) return '/onboarding';
       return null;
     },
     routes: [

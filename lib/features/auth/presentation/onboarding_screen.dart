@@ -43,7 +43,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => context.go('/map'),
+                  onPressed: () => context.go('/auth/login'),
                   child: const Text('Skip', style: TextStyle(color: Colors.white70, fontSize: 16)),
                 ),
               ),
@@ -115,7 +115,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           ElevatedButton(
-                            onPressed: () => context.go('/map'),
+                            onPressed: () => context.go('/auth/login'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: AppColors.forestGreen,

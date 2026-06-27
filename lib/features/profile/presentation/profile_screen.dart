@@ -11,8 +11,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-
-    if (user == null) return _GuestProfile(onSignIn: () => context.go('/auth/login'));
+    if (user == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     return Scaffold(
       appBar: AppBar(
@@ -126,31 +125,3 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-class _GuestProfile extends StatelessWidget {
-  const _GuestProfile({required this.onSignIn});
-  final VoidCallback onSignIn;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.person_outline, size: 80, color: Colors.grey),
-              const SizedBox(height: 16),
-              Text('Sign in to sync your activities', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const Text('Your tracks are saved locally. Create an account to back them up and join the community.', textAlign: TextAlign.center),
-              const SizedBox(height: 32),
-              FilledButton(onPressed: onSignIn, child: const Text('Sign In or Create Account')),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
