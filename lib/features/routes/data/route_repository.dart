@@ -1,13 +1,7 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_route.dart';
-
-// Local asset fallback while GPX files are not yet in Storage
-const _localGpxAssets = <String, String>{
-  'riscos-maliciosa': 'assets/routes/riscos_de_la_maliciosa.gpx',
-};
 
 class RouteRepository {
   const RouteRepository(this._db);
@@ -37,19 +31,15 @@ class RouteRepository {
     return data == null ? null : AppRoute.fromSupabase(data);
   }
 
-  /// Downloads GPX from Supabase Storage, falls back to bundled assets.
+  /// Downloads GPX from Supabase Storage.
   Future<String> loadGpx(AppRoute route) async {
-    if (route.gpxPath != null) {
-      try {
-        final bytes = await _db.storage
-            .from('gpx-files')
-            .download(route.gpxPath!);
-        return String.fromCharCodes(bytes);
-      } catch (_) {}
+    if (route.gpxPath == null) {
+      throw Exception('Route ${route.slug} has no GPX file in Storage');
     }
-    final asset = _localGpxAssets[route.slug];
-    if (asset != null) return rootBundle.loadString(asset);
-    throw Exception('No GPX found for route ${route.slug}');
+    final bytes = await _db.storage
+        .from('gpx-files')
+        .download(route.gpxPath!);
+    return String.fromCharCodes(bytes);
   }
 }
 
