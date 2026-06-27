@@ -1,13 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpx/gpx.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../data/local_routes.dart';
+import '../data/app_route.dart';
+import '../data/route_repository.dart';
 
-export '../data/local_routes.dart';
+export '../data/app_route.dart';
+export '../data/route_repository.dart';
+
+// ── RouteData (GPX-derived stats) ────────────────────────────────────────────
 
 class RouteData {
   const RouteData({
@@ -31,8 +34,6 @@ class RouteData {
   }
 }
 
-// Difficulty multipliers applied on top of Naismith's rule.
-// Hard terrain, exposure and route-finding all add time beyond pure fitness.
 const _difficultyMultiplier = {
   'Easy':     1.0,
   'Moderate': 1.2,
@@ -40,13 +41,33 @@ const _difficultyMultiplier = {
   'Expert':   1.75,
 };
 
-final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId) async {
-  final route = routeById(routeId);
-  if (route == null) return const RouteData(points: [], distanceKm: 0, elevationGainM: 0, elevationLossM: 0, estimatedTimeMin: 0);
+// ── Providers ─────────────────────────────────────────────────────────────────
 
-  final raw = await rootBundle.loadString(route.gpxAsset);
-  final gpx = GpxReader().fromString(raw);
+/// All public routes from Supabase.
+final routesProvider = FutureProvider<List<AppRoute>>((ref) {
+  return ref.watch(routeRepositoryProvider).fetchRoutes();
+});
 
+/// Single route metadata by slug.
+final routeBySlugProvider =
+    FutureProvider.family<AppRoute?, String>((ref, slug) {
+  return ref.watch(routeRepositoryProvider).fetchBySlug(slug);
+});
+
+/// GPX-parsed data for a route (points, elevation, distance, time).
+final routeDataProvider =
+    FutureProvider.family<RouteData, String>((ref, slug) async {
+  final repo  = ref.watch(routeRepositoryProvider);
+  final route = await repo.fetchBySlug(slug);
+
+  if (route == null) {
+    return const RouteData(
+        points: [], distanceKm: 0, elevationGainM: 0,
+        elevationLossM: 0, estimatedTimeMin: 0);
+  }
+
+  final raw    = await repo.loadGpx(route);
+  final gpx    = GpxReader().fromString(raw);
   final trkpts = gpx.trks
       .expand((t) => t.trksegs)
       .expand((s) => s.trkpts)
@@ -55,15 +76,12 @@ final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId
 
   final points = trkpts.map((p) => LatLng(p.lat!, p.lon!)).toList();
 
-  // Distance via Haversine
   double distanceM = 0;
   for (var i = 1; i < points.length; i++) {
     distanceM += _haversineM(points[i - 1], points[i]);
   }
 
-  // Elevation gain and loss
-  double gainM = 0;
-  double lossM = 0;
+  double gainM = 0, lossM = 0;
   for (var i = 1; i < trkpts.length; i++) {
     final prev = trkpts[i - 1].ele;
     final curr = trkpts[i].ele;
@@ -73,21 +91,20 @@ final routeDataProvider = FutureProvider.family<RouteData, String>((ref, routeId
     if (diff < 0) lossM += diff.abs();
   }
 
-  // Naismith's rule: 1h per 4 km + 1h per 600 m gain
-  final naismithMin = (distanceM / 1000 / 4 + gainM / 600) * 60;
-  final multiplier  = _difficultyMultiplier[route.difficulty] ?? 1.0;
-  final totalMin    = (naismithMin * multiplier).round();
+  final naismithMin =
+      (distanceM / 1000 / 4 + gainM / 600) * 60;
+  final multiplier =
+      _difficultyMultiplier[route.difficultyLabel] ?? 1.0;
 
   return RouteData(
     points:           points,
     distanceKm:       double.parse((distanceM / 1000).toStringAsFixed(1)),
     elevationGainM:   gainM.round(),
     elevationLossM:   lossM.round(),
-    estimatedTimeMin: totalMin,
+    estimatedTimeMin: (naismithMin * multiplier).round(),
   );
 });
 
-// Haversine distance in metres between two LatLng points
 double _haversineM(LatLng a, LatLng b) {
   const r = 6371000.0;
   final dLat = _rad(b.latitude  - a.latitude);

@@ -20,9 +20,14 @@ class RouteDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final route  = routeById(routeId);
-    final dataAV = ref.watch(routeDataProvider(routeId));
+    final routeAV = ref.watch(routeBySlugProvider(routeId));
+    final dataAV  = ref.watch(routeDataProvider(routeId));
 
+    final route = routeAV.valueOrNull;
+
+    if (routeAV.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     if (route == null) {
       return Scaffold(
         appBar: AppBar(),
@@ -33,7 +38,7 @@ class RouteDetailScreen extends ConsumerWidget {
     void openMap(List<LatLng> points) => Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _FullscreenRouteMap(name: route.name, points: points),
+        builder: (_) => _FullscreenRouteMap(name: route.title, points: points),
       ),
     );
 
@@ -91,7 +96,7 @@ class RouteDetailScreen extends ConsumerWidget {
                           onTap: () => _showElevationModal(context, data),
                         ),
                         _StatBlock(label: 'Est. Time',  value: data.estimatedTimeLabel),
-                        _StatBlock(label: 'Difficulty', value: route.difficulty),
+                        _StatBlock(label: 'Difficulty', value: route.difficultyLabel),
                         _StatBlock(
                           label: 'Type',
                           value: route.shape.label,
@@ -103,24 +108,26 @@ class RouteDetailScreen extends ConsumerWidget {
 
                   const Divider(height: 32),
 
-                  Text(route.name, style: Theme.of(context).textTheme.headlineSmall
+                  Text(route.title, style: Theme.of(context).textTheme.headlineSmall
                       ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
 
                   Row(children: [
                     ...List.generate(5, (i) {
-                      if (i < route.rating.floor()) return const Icon(Icons.star,      color: Colors.amber, size: 20);
-                      if (i < route.rating)         return const Icon(Icons.star_half, color: Colors.amber, size: 20);
+                      if (i < route.avgRating.floor()) return const Icon(Icons.star,      color: Colors.amber, size: 20);
+                      if (i < route.avgRating)         return const Icon(Icons.star_half, color: Colors.amber, size: 20);
                       return const Icon(Icons.star_border, color: Colors.amber, size: 20);
                     }),
                     const SizedBox(width: 8),
-                    Text('${route.rating} · ${route.reviewCount} reviews'),
+                    Text('${route.avgRating.toStringAsFixed(1)} · ${route.reviewCount} reviews'),
                   ]),
 
-                  const SizedBox(height: 16),
-                  Text('Description', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(route.description),
+                  if (route.description != null) ...[
+                    const SizedBox(height: 16),
+                    Text('Description', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Text(route.description!),
+                  ],
 
                   const SizedBox(height: 24),
                   Text('Waypoints', style: Theme.of(context).textTheme.titleMedium),
@@ -146,7 +153,7 @@ class RouteDetailScreen extends ConsumerWidget {
       bottomNavigationBar: dataAV.maybeWhen(
         data: (data) => _BottomBar(
           routeId: routeId,
-          routeName: route.name,
+          routeName: route.title,
           points: data.points,
           onStart: () {
             ref.read(plannedRouteIdProvider.notifier).state = routeId;

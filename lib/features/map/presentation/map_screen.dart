@@ -10,6 +10,7 @@ import '../../../core/config/env.dart';
 import '../../../core/map/hybrid_tile_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../offline/providers/connectivity_provider.dart';
+import '../../routes/data/app_route.dart';
 import '../../routes/providers/route_provider.dart';
 import '../../tracking/providers/tracking_provider.dart';
 
@@ -53,19 +54,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final isTracking = ref.watch(trackingStatusProvider) == TrackingStatus.recording;
     final isOnline   = ref.watch(isOnlineProvider);
 
-    // Build route start markers from local routes
+    // Build route start markers from Supabase routes
+    final routesAV = ref.watch(routesProvider);
     final routeMarkers = <Marker>[];
-    for (final route in localRoutes) {
-      final dataAV = ref.watch(routeDataProvider(route.id));
-      final points = dataAV.valueOrNull?.points;
-      if (points != null && points.isNotEmpty) {
-        final start = points.first;
+    for (final route in routesAV.valueOrNull ?? <AppRoute>[]) {
+      if (route.startLat != null && route.startLon != null) {
         routeMarkers.add(Marker(
-          point: start,
+          point: LatLng(route.startLat!, route.startLon!),
           width: 44,
           height: 44,
           child: GestureDetector(
-            onTap: () => _showRouteSummary(context, route, dataAV.valueOrNull),
+            onTap: () => _showRouteSummary(context, route),
             child: const _RoutePin(),
           ),
         ));
@@ -182,13 +181,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  void _showRouteSummary(BuildContext context, LocalRoute route, RouteData? data) {
+  void _showRouteSummary(BuildContext context, AppRoute route) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _RouteSummarySheet(route: route, data: data),
+      builder: (_) => _RouteSummarySheet(route: route),
     );
   }
 }
@@ -218,10 +217,9 @@ class _RoutePin extends StatelessWidget {
 
 // ── Route summary bottom sheet ───────────────────────────────────────────────
 
-class _RouteSummarySheet extends StatelessWidget {
-  const _RouteSummarySheet({required this.route, required this.data});
-  final LocalRoute route;
-  final RouteData? data;
+class _RouteSummarySheet extends ConsumerWidget {
+  const _RouteSummarySheet({required this.route});
+  final AppRoute route;
 
   static const _difficultyColors = {
     'Easy':     Colors.green,
@@ -231,8 +229,9 @@ class _RouteSummarySheet extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
-    final color = _difficultyColors[route.difficulty] ?? Colors.grey;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color  = _difficultyColors[route.difficultyLabel] ?? Colors.grey;
+    final dataAV = ref.watch(routeDataProvider(route.slug));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
@@ -240,29 +239,33 @@ class _RouteSummarySheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag handle
           Center(
             child: Container(
               width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(height: 16),
 
-          // Name + rating
           Row(
             children: [
               Expanded(
-                child: Text(route.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                child: Text(route.title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
               ),
               const Icon(Icons.star, size: 16, color: Colors.amber),
               const SizedBox(width: 2),
-              Text('${route.rating}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(route.avgRating.toStringAsFixed(1),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 10),
 
-          // Difficulty + shape
           Row(
             children: [
               Container(
@@ -271,7 +274,11 @@ class _RouteSummarySheet extends StatelessWidget {
                   color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(route.difficulty, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+                child: Text(route.difficultyLabel,
+                    style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
               ),
               const SizedBox(width: 8),
               Container(
@@ -280,36 +287,38 @@ class _RouteSummarySheet extends StatelessWidget {
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(route.shape.label, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                child: Text(route.shape.label,
+                    style: TextStyle(
+                        color: Colors.grey.shade700, fontSize: 13)),
               ),
             ],
           ),
           const SizedBox(height: 14),
 
-          // Stats
-          if (data != null)
-            Row(
+          dataAV.when(
+            loading: () =>
+                const SizedBox(height: 20, child: LinearProgressIndicator()),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (data) => Row(
               children: [
-                _Stat(icon: Icons.straighten, label: '${data!.distanceKm} km'),
+                _Stat(icon: Icons.straighten, label: '${data.distanceKm} km'),
                 const SizedBox(width: 20),
-                _Stat(icon: Icons.terrain, label: '+${data!.elevationGainM} m'),
+                _Stat(icon: Icons.terrain, label: '+${data.elevationGainM} m'),
                 const SizedBox(width: 20),
-                _Stat(icon: Icons.schedule, label: data!.estimatedTimeLabel),
+                _Stat(icon: Icons.schedule, label: data.estimatedTimeLabel),
               ],
-            )
-          else
-            const SizedBox(height: 20, child: LinearProgressIndicator()),
+            ),
+          ),
 
           const SizedBox(height: 20),
 
-          // Actions
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    context.go('/explore/route/${route.id}');
+                    context.go('/explore/route/${route.slug}');
                   },
                   child: const Text('Ver ruta'),
                 ),
@@ -319,7 +328,7 @@ class _RouteSummarySheet extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    context.go('/explore/route/${route.id}');
+                    context.go('/explore/route/${route.slug}');
                   },
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Iniciar'),

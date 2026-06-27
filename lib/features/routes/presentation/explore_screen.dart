@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../data/app_route.dart';
 import '../providers/route_provider.dart';
 
 IconData routeShapeIcon(RouteShape shape) => switch (shape) {
@@ -29,19 +30,19 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     super.dispose();
   }
 
-  List<LocalRoute> get _filtered {
+  List<AppRoute> _filtered(List<AppRoute> routes) {
     final query = _searchController.text.toLowerCase();
-    return localRoutes.where((r) {
+    return routes.where((r) {
       final matchesActivity = _selectedActivity == 'all' || r.activityType == _selectedActivity;
       final matchesShape    = _selectedShape == null || r.shape == _selectedShape;
-      final matchesQuery    = query.isEmpty || r.name.toLowerCase().contains(query);
+      final matchesQuery    = query.isEmpty || r.title.toLowerCase().contains(query);
       return matchesActivity && matchesShape && matchesQuery;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final routes = _filtered;
+    final routesAV = ref.watch(routesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -80,7 +81,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       label: Text(label),
                       selected: _selectedActivity == type,
                       onSelected: (_) => setState(() => _selectedActivity = type),
-                      selectedColor: AppColors.forestGreen.withOpacity(0.2),
+                      selectedColor: AppColors.forestGreen.withValues(alpha: 0.2),
                     ),
                   ),
                 const VerticalDivider(indent: 6, endIndent: 6),
@@ -95,27 +96,34 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                       onSelected: (_) => setState(() =>
                         _selectedShape = _selectedShape == shape ? null : shape,
                       ),
-                      selectedColor: AppColors.forestGreen.withOpacity(0.2),
+                      selectedColor: AppColors.forestGreen.withValues(alpha: 0.2),
                     ),
                   ),
               ],
             ),
           ),
 
-          if (routes.isEmpty)
-            const Expanded(
-              child: Center(child: Text('No routes found.', style: TextStyle(color: Colors.grey))),
-            )
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: routes.length,
-                itemBuilder: (_, i) => _RouteCard(
-                  route: routes[i],
-                  onTap: () => context.go('/explore/route/${routes[i].id}'),
-                ),
-              ),
+          Expanded(
+            child: routesAV.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error:   (e, _) => Center(child: Text('Error: $e')),
+              data: (all) {
+                final routes = _filtered(all);
+                if (routes.isEmpty) {
+                  return const Center(
+                    child: Text('No routes found.', style: TextStyle(color: Colors.grey)),
+                  );
+                }
+                return ListView.builder(
+                  itemCount: routes.length,
+                  itemBuilder: (_, i) => _RouteCard(
+                    route: routes[i],
+                    onTap: () => context.go('/explore/route/${routes[i].slug}'),
+                  ),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
@@ -131,7 +139,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
 
 class _RouteCard extends ConsumerWidget {
   const _RouteCard({required this.route, required this.onTap});
-  final LocalRoute route;
+  final AppRoute route;
   final VoidCallback onTap;
 
   static const _difficultyColors = {
@@ -143,8 +151,8 @@ class _RouteCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color   = _difficultyColors[route.difficulty] ?? Colors.grey;
-    final dataAV  = ref.watch(routeDataProvider(route.id));
+    final color  = _difficultyColors[route.difficultyLabel] ?? Colors.grey;
+    final dataAV = ref.watch(routeDataProvider(route.slug));
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -159,12 +167,13 @@ class _RouteCard extends ConsumerWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(route.name, style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(route.title,
+                        style: Theme.of(context).textTheme.titleMedium),
                   ),
                   Row(children: [
                     const Icon(Icons.star, size: 16, color: Colors.amber),
                     const SizedBox(width: 2),
-                    Text(route.rating.toStringAsFixed(1)),
+                    Text(route.avgRating.toStringAsFixed(1)),
                   ]),
                 ],
               ),
@@ -174,15 +183,17 @@ class _RouteCard extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.15),
+                      color: color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(route.difficulty, style: TextStyle(color: color, fontSize: 12)),
+                    child: Text(route.difficultyLabel,
+                        style: TextStyle(color: color, fontSize: 12)),
                   ),
                   const SizedBox(width: 8),
                   Icon(routeShapeIcon(route.shape), size: 14, color: Colors.grey),
                   const SizedBox(width: 3),
-                  Text(route.shape.label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(route.shape.label,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(width: 12),
                   dataAV.when(
                     loading: () => const SizedBox(
@@ -194,11 +205,13 @@ class _RouteCard extends ConsumerWidget {
                       children: [
                         const Icon(Icons.straighten, size: 14, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text('${data.distanceKm} km', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                        Text('${data.distanceKm} km',
+                            style: const TextStyle(fontSize: 13, color: Colors.grey)),
                         const SizedBox(width: 12),
                         const Icon(Icons.terrain, size: 14, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text('+${data.elevationGainM} m', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                        Text('+${data.elevationGainM} m',
+                            style: const TextStyle(fontSize: 13, color: Colors.grey)),
                       ],
                     ),
                   ),
@@ -229,7 +242,9 @@ class _FiltersSheet extends StatelessWidget {
           RangeSlider(values: const RangeValues(0, 50), max: 100, onChanged: null),
           Text('Difficulty', style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 8),
-          FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Apply')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Apply')),
           const SizedBox(height: 8),
         ],
       ),
