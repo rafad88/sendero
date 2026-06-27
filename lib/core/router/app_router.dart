@@ -1,41 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/onboarding_screen.dart';
-import '../../features/map/presentation/map_screen.dart';
-import '../../features/tracking/presentation/tracking_screen.dart';
-import '../../features/tracking/presentation/save_activity_screen.dart';
-import '../../features/routes/presentation/route_detail_screen.dart';
-import '../../features/routes/presentation/explore_screen.dart';
-import '../../features/profile/presentation/profile_screen.dart';
-import '../../features/offline/presentation/offline_maps_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/map/presentation/map_screen.dart';
+import '../../features/offline/presentation/offline_maps_screen.dart';
+import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/routes/presentation/explore_screen.dart';
+import '../../features/routes/presentation/route_detail_screen.dart';
+import '../../features/tracking/presentation/save_activity_screen.dart';
+import '../../features/tracking/presentation/tracking_screen.dart';
 import '../widgets/main_shell.dart';
 
-part 'app_router.g.dart';
+// Bridges Riverpod auth state into a ChangeNotifier that GoRouter can listen to.
+// The router is created once; auth changes trigger a redirect re-evaluation
+// without recreating the GoRouter widget tree.
+class _AuthRouterNotifier extends ChangeNotifier {
+  _AuthRouterNotifier(Ref ref) {
+    ref.listen<AsyncValue<User?>>(authStateProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+}
 
-@riverpod
-GoRouter appRouter(AppRouterRef ref) {
-  final authState = ref.watch(authStateProvider);
+final _authRouterNotifierProvider = Provider<_AuthRouterNotifier>((ref) {
+  return _AuthRouterNotifier(ref);
+});
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final notifier = ref.watch(_authRouterNotifierProvider);
 
   return GoRouter(
     initialLocation: '/map',
+    refreshListenable: notifier,
     redirect: (context, state) {
-      final isLoggedIn   = authState.valueOrNull != null;
-      final isAuthRoute  = state.matchedLocation.startsWith('/auth');
-      final isOnboarding = state.matchedLocation == '/onboarding';
+      final isLoggedIn =
+          Supabase.instance.client.auth.currentSession?.user != null;
+      final loc = state.matchedLocation;
+      final isAuthRoute  = loc.startsWith('/auth');
+      final isOnboarding = loc == '/onboarding';
 
-      // Auth route while logged in → go to map
       if (isLoggedIn && isAuthRoute) return '/map';
-      // Not logged in and trying to access auth-only routes → onboarding
-      // Map, explore, tracking are accessible as guest
+
       if (!isLoggedIn && !isAuthRoute && !isOnboarding) {
-        final guestAllowed = state.matchedLocation.startsWith('/map') ||
-            state.matchedLocation.startsWith('/explore') ||
-            state.matchedLocation.startsWith('/tracking');
+        final guestAllowed = loc.startsWith('/map') ||
+            loc.startsWith('/explore') ||
+            loc.startsWith('/tracking');
         if (!guestAllowed) return '/onboarding';
       }
       return null;
@@ -58,17 +71,20 @@ GoRouter appRouter(AppRouterRef ref) {
           ),
           GoRoute(
             path: '/explore',
-            pageBuilder: (_, __) => const NoTransitionPage(child: ExploreScreen()),
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: ExploreScreen()),
             routes: [
               GoRoute(
                 path: 'route/:id',
-                builder: (_, state) => RouteDetailScreen(routeId: state.pathParameters['id']!),
+                builder: (_, state) =>
+                    RouteDetailScreen(routeId: state.pathParameters['id']!),
               ),
             ],
           ),
           GoRoute(
             path: '/profile',
-            pageBuilder: (_, __) => const NoTransitionPage(child: ProfileScreen()),
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: ProfileScreen()),
             routes: [
               GoRoute(
                 path: 'offline-maps',
@@ -78,20 +94,18 @@ GoRouter appRouter(AppRouterRef ref) {
           ),
         ],
       ),
-      // Full-screen routes (outside shell — no bottom nav)
       GoRoute(
         path: '/tracking',
         builder: (_, __) => const TrackingScreen(),
       ),
       GoRoute(
         path: '/tracking/save',
-        builder: (_, state) => SaveActivityScreen(
-          trackId: state.extra as String,
-        ),
+        builder: (_, state) =>
+            SaveActivityScreen(trackId: state.extra as String),
       ),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Route not found: ${state.error}')),
     ),
   );
-}
+});

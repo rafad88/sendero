@@ -31,9 +31,14 @@ class ProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                CircleAvatar(radius: 40, backgroundImage: NetworkImage(user.userMetadata?['avatar_url'] ?? '')),
+                _Avatar(url: user.userMetadata?['avatar_url'] as String?),
                 const SizedBox(height: 12),
-                Text(user.userMetadata?['display_name'] ?? user.email ?? '', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  (user.userMetadata?['full_name'] as String?) ??
+                      (user.userMetadata?['name'] as String?) ??
+                      user.email ?? '',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -99,6 +104,26 @@ class _StatCell extends StatelessWidget {
       Text(label, style: Theme.of(context).textTheme.labelSmall),
     ],
   );
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.url});
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    if (url != null && url!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 40,
+        backgroundImage: NetworkImage(url!),
+        onBackgroundImageError: (_, __) {},
+      );
+    }
+    return const CircleAvatar(
+      radius: 40,
+      child: Icon(Icons.person, size: 40),
+    );
+  }
 }
 
 class _GuestProfile extends StatelessWidget {
