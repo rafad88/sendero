@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/app_route.dart';
 import '../data/route_repository.dart';
+import '../providers/route_provider.dart';
 
 // ── Internal state ────────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
         authorId:       user.id,
       );
 
+      ref.invalidate(routesProvider);
       if (mounted) context.go('/explore/route/$slug');
     } catch (e) {
       setState(() { _isUploading = false; _error = e.toString(); });
