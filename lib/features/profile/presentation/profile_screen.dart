@@ -79,6 +79,13 @@ class ProfileScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () {},
           ),
+          ListTile(
+            leading: Icon(Icons.add_location_alt_outlined, color: AppColors.forestGreen),
+            title: const Text('Crear ruta'),
+            subtitle: const Text('Importa un archivo GPX'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.go('/profile/create-route'),
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),

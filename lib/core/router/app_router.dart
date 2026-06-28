@@ -8,6 +8,7 @@ import '../../features/auth/presentation/onboarding_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/map/presentation/map_screen.dart';
 import '../../features/offline/presentation/offline_maps_screen.dart';
+import '../../features/routes/presentation/create_route_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/routes/presentation/explore_screen.dart';
 import '../../features/routes/presentation/route_detail_screen.dart';
@@ -83,6 +84,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'offline-maps',
                 builder: (_, __) => const OfflineMapsScreen(),
+              ),
+              GoRoute(
+                path: 'create-route',
+                builder: (_, __) => const CreateRouteScreen(),
               ),
             ],
           ),
