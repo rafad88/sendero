@@ -151,12 +151,16 @@ class _CreateRouteScreenState extends ConsumerState<CreateRouteScreen> {
     setState(() { _isParsing = true; _error = null; });
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['gpx'],
+        type: FileType.any,
         withData: true,
       );
       if (result == null || result.files.single.bytes == null) {
         setState(() => _isParsing = false);
+        return;
+      }
+      final ext = result.files.single.extension?.toLowerCase();
+      if (ext != 'gpx') {
+        setState(() { _isParsing = false; _error = 'Selecciona un archivo .gpx'; });
         return;
       }
       final bytes    = result.files.single.bytes!;
